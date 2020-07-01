@@ -465,41 +465,6 @@ def convertBackRatio(xmin,ymin,xmax,ymax,oriSize,targetSize):
     c = int(np.round(xmax * x_scale))
     d = int(np.round(ymax * y_scale))
     return a,b,c,d
-def kill_duplicate_by_score(prediction, xou_thres=.7):
-    from itertools import combinations
-    def bb_intersection_over_union(boxA, boxB):
-        boxA = (boxA[0], boxA[1], boxA[0] + boxA[2], boxA[3] + boxA[1])
-        boxB = (boxB[0], boxB[1], boxB[0] + boxB[2], boxB[3] + boxB[1])
-        # determine the (x, y)-coordinates of the intersection rectangle
-        xA = max(boxA[0], boxB[0])
-        yA = max(boxA[1], boxB[1])
-        xB = min(boxA[2], boxB[2])
-        yB = min(boxA[3], boxB[3])
-        # compute the area of intersection rectangle
-        interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
-        # compute the area of both the prediction and ground-truth
-        # rectangles
-        boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
-        boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
-        # compute the intersection over union by taking the intersection
-        # area and dividing it by the sum of prediction + ground-truth
-        # areas - the interesection area
-        iou = interArea / float(boxAArea + boxBArea - interArea)
-        # return the intersection over union value
-        return iou
-
-    prediction[:] = [x for x in prediction if float(x[1]) > .5]
-
-    boxcombins = combinations(prediction, 2)
-    for boxcomb in boxcombins:
-        try:
-            xou = bb_intersection_over_union(boxcomb[0][2], boxcomb[1][2])
-            if xou > float(xou_thres):
-                prediction.remove(boxcomb[1] if boxcomb[0][1] > boxcomb[1][1] else boxcomb[0])
-        except:
-            continue
-
-    return prediction
 
 class YOLO_single_img():
     def __init__(self, configPath="cfg/yolo-obj.cfg", weightPath="weights/yolo-obj_final.weights",
@@ -631,3 +596,48 @@ def convert_xminymin_xcenterycenter(h, w, xmin, ymin, xmax, ymax):
     h = round(h * dh, 6)
     #     return x, y, w, h
     return f'{x} {y} {w} {h}'
+
+def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.3):
+    from itertools import combinations
+    def bb_intersection_over_union(boxA, boxB):
+        if (boxA == boxB):
+            return 1.
+
+        def AcontainsB(r1x1, r1y1, r1x2, r1y2, r2x1, r2y1, r2x2, r2y2):
+            # print(f"r1x1:{r1x1}, r1y1:{r1y1}, r1x2:{r1x2}, r1y2:{r1y2}, r2x1:{r2x1}, r2x2:{r2x2}, r2y1:{r2y1}, r2y2:{r2y2}")
+            return r1x1 < r2x1 < r2x2 < r1x2 and r1y1 < r2y1 < r2y2 < r1y2
+
+        if (AcontainsB(*boxA, *boxB) or AcontainsB(*boxB, *boxA)):
+            return 1.
+        boxA = (boxA[0], boxA[1], boxA[0] + boxA[2], boxA[3] + boxA[1])
+        boxB = (boxB[0], boxB[1], boxB[0] + boxB[2], boxB[3] + boxB[1])
+        # determine the (x, y)-coordinates of the intersection rectangle
+        xA = max(boxA[0], boxB[0])
+        yA = max(boxA[1], boxB[1])
+        xB = min(boxA[2], boxB[2])
+        yB = min(boxA[3], boxB[3])
+        # compute the area of intersection rectangle
+        interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+        # compute the area of both the prediction and ground-truth
+        # rectangles
+        boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
+        boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+        # compute the intersection over union by taking the intersection
+        # area and dividing it by the sum of prediction + ground-truth
+        # areas - the interesection area
+        iou = interArea / float(boxAArea + boxBArea - interArea)
+        # return the intersection over union value
+        return iou
+
+    prediction[:] = [x for x in prediction if float(x[1]) > score_thres]
+
+    boxcombins = combinations(prediction, 2)
+    for boxcomb in boxcombins:
+        try:
+            xou = bb_intersection_over_union(boxcomb[0][2], boxcomb[1][2])
+            if xou > float(xou_thres):
+                prediction.remove(boxcomb[1] if boxcomb[0][1] > boxcomb[1][1] else boxcomb[0])
+        except:
+            continue
+
+    return prediction
