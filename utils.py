@@ -606,3 +606,28 @@ def kill_duplicate_by_score(prediction, xou_thres=.7):
             continue
 
     return prediction
+
+def convert_back_xcenterycenter(ph, pw, x, y, w, h):
+    x, y=float(x),float(y)
+    dw, dh = float(pw) * float(w), float(ph) * float(h)
+    xmin = round((x * pw) - (dw / 2), 6)
+    xmax = round((x * pw) + (dw / 2), 6)
+    ymin = round((y * ph) - (dh / 2), 6)
+    ymax = round((y * ph) + (dh / 2), 6)
+    return f"{xmin} {ymin} {xmax} {ymax}"
+
+def convert_xminymin_xcenterycenter(h, w, xmin, ymin, xmax, ymax):
+    # < x_center > < y_center > < width > < height > - float values relative to width and height of image, it can  be  equal from (0.0 to 1.0]
+    dw = 1. / (float(w))
+    dh = 1. / (float(h))
+    x = (xmin + xmax) / 2.0
+
+    y = (ymin + ymax) / 2.0
+    w = xmax - xmin
+    h = ymax - ymin
+    x = round(x * dw, 6)
+    w = round(w * dw, 6)
+    y = round(y * dh, 6)
+    h = round(h * dh, 6)
+    #     return x, y, w, h
+    return f'{x} {y} {w} {h}'
