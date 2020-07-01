@@ -597,7 +597,7 @@ def convert_xminymin_xcenterycenter(h, w, xmin, ymin, xmax, ymax):
     #     return x, y, w, h
     return f'{x} {y} {w} {h}'
 
-def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.3):
+def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.3,inter_thres=.8):
     from itertools import combinations
     def bb_intersection_over_union(boxA, boxB):
         if (boxA == boxB):
@@ -609,6 +609,9 @@ def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.3):
 
         if (AcontainsB(*boxA, *boxB) or AcontainsB(*boxB, *boxA)):
             return 1.
+
+
+
         boxA = (boxA[0], boxA[1], boxA[0] + boxA[2], boxA[3] + boxA[1])
         boxB = (boxB[0], boxB[1], boxB[0] + boxB[2], boxB[3] + boxB[1])
         # determine the (x, y)-coordinates of the intersection rectangle
@@ -627,6 +630,9 @@ def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.3):
         # areas - the interesection area
         iou = interArea / float(boxAArea + boxBArea - interArea)
         # return the intersection over union value
+        minboxArea=min(boxAArea,boxBArea)
+        if (interArea/minboxArea >inter_thres):
+            return 1.
         return iou
 
     prediction[:] = [x for x in prediction if float(x[1]) > score_thres]
