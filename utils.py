@@ -1,8 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import base64
 import functools
-# from utils import setup_logger
-# from utils import YOLO_single_img
 import logging
 import os
 import sys
@@ -17,7 +15,7 @@ from detectron2.utils.visualizer import Visualizer
 from fvcore.common.file_io import PathManager
 from termcolor import colored
 import matplotlib.colors as mplc
-import darknet
+import uselib
 
 try:
     from PIL import ImageEnhance
@@ -42,9 +40,9 @@ if pil_image is not None:
         _PIL_INTERPOLATION_METHODS['lanczos'] = pil_image.LANCZOS
 _SMALL_OBJECT_AREA_THRESH = 1000
 HAS_GPU = True
-darknet.hasGPU = HAS_GPU
+uselib.hasGPU = HAS_GPU
 if HAS_GPU:
-    from darknet import set_gpu
+    from uselib import set_gpu
 
 
 class _ColorfulFormatter(logging.Formatter):
@@ -76,7 +74,7 @@ def _cached_log_stream(filename):
 
 @functools.lru_cache()  # so that calling setup_logger multiple times won't add many handlers
 def setup_logger(
-        output=None, distributed_rank=0, *, color=True, name="chefCap", abbrev_name=None, log_level=logging.DEBUG
+        output=None, distributed_rank=0, *, color=True, name="vehicle", abbrev_name=None, log_level=logging.DEBUG
 ):
     """
     Initialize the detectron2 logger and set its verbosity level to "DEBUG".
@@ -409,7 +407,7 @@ class myx_Visualizer(Visualizer):
         # color[np.argmax(color)] = max(0.8, np.max(color))
 
         x, y = position
-        text=''
+        text = ''
         self.output.ax.text(
             x,
             y,
@@ -435,7 +433,7 @@ def base64toImageArray(img_base64):
 
 
 def numpArray2Base64(img_arr):
-    img_arr = cv2.cvtColor(img_arr, cv2.COLOR_BGR2RGB)
+    # img_arr = cv2.cvtColor(img_arr, cv2.COLOR_BGR2RGB)
     img_str = cv2.imencode('.jpg', img_arr)[1].tostring()
     img_base64 = base64.b64encode(img_str).decode('utf-8')
     return img_base64
@@ -457,83 +455,15 @@ def convertBack(detection):
     ymax = int(round(y + (h / 2)))
     return xmin, ymin, xmax, ymax
 
-def convertBackRatio(xmin,ymin,xmax,ymax,oriSize,targetSize):
+
+def convertBackRatio(xmin, ymin, xmax, ymax, oriSize, targetSize):
     y_scale = targetSize[0] / oriSize[0]
     x_scale = targetSize[1] / oriSize[1]
     a = int(np.round(xmin * x_scale))
     b = int(np.round(ymin * y_scale))
     c = int(np.round(xmax * x_scale))
     d = int(np.round(ymax * y_scale))
-    return a,b,c,d
-
-class YOLO_single_img():
-    def __init__(self, configPath="cfg/yolo-obj.cfg", weightPath="weights/yolo-obj_final.weights",
-                 metaPath="cfg/obj.data",
-                 gpu_id=4):
-
-        self.metaMain, self.netMain, self.altNames, self.dark = None, None, None, darknet
-        # self.logger = setup_logger(log_level=logging.CRITICAL)
-        if HAS_GPU:
-            set_gpu(gpu_id)
-        if not os.path.exists(configPath):
-            raise ValueError("Invalid config path `" +
-                             os.path.abspath(configPath) + "`")
-        if not os.path.exists(weightPath):
-            raise ValueError("Invalid weight path `" +
-                             os.path.abspath(weightPath) + "`")
-        if not os.path.exists(metaPath):
-            raise ValueError("Invalid data file path `" +
-                             os.path.abspath(metaPath) + "`")
-        if self.netMain is None:
-            self.netMain = darknet.load_net_custom(configPath.encode(
-                "ascii"), weightPath.encode("ascii"), 0, 1)  # batch size = 1
-        if self.metaMain is None:
-            self.metaMain = darknet.load_meta(metaPath.encode("ascii"))
-        if self.altNames is None:
-            try:
-                with open(metaPath) as metaFH:
-                    metaContents = metaFH.read()
-                    import re
-                    match = re.search("names *= *(.*)$", metaContents,
-                                      re.IGNORECASE | re.MULTILINE)
-                    if match:
-                        result = match.group(1)
-                    else:
-                        result = None
-                    try:
-                        if os.path.exists(result):
-                            with open(result) as namesFH:
-                                namesList = namesFH.read().strip().split("\n")
-                                self.altNames = [x.strip() for x in namesList]
-                    except TypeError:
-                        pass
-            except Exception:
-                pass
-        self.size = (self.dark.network_width(self.netMain),
-                     self.dark.network_height(self.netMain))
-        self._seconds = 0
-
-    def darkdetect(self, image_src):
-        darknet_image = self.dark.make_image(self.dark.network_width(self.netMain),
-                                             self.dark.network_height(self.netMain), 3)
-
-        try:
-            frame_rgb = cv2.cvtColor(image_src, cv2.COLOR_BGR2RGB)
-            frame_resized = cv2.resize(frame_rgb, self.size, interpolation=cv2.INTER_LINEAR)
-            # self.logger.info(frame_resized.shape)
-            self.dark.copy_image_from_bytes(darknet_image, frame_resized.tobytes())
-            detections = self.dark.detect_image(self.netMain, self.metaMain, darknet_image, thresh=0.25)
-            return detections, cv2.cvtColor(frame_resized, cv2.COLOR_RGB2BGR)
-        except:
-            raise
-
-    def getsize(self):
-        return self.size
-
-
-# logger = setup_logger(log_level=logging.CRITICAL)
-# yoyo = YOLO_single_img(configPath="cfg/chefCap.cfg", weightPath="cfg/chefCap_3000.weights", metaPath="cfg/chefCap.data")
-thirteentimestamp = lambda: int(round(time.time() * 1e3))
+    return a, b, c, d
 
 
 def kill_duplicate_by_score(prediction, xou_thres=.7):
@@ -572,32 +502,136 @@ def kill_duplicate_by_score(prediction, xou_thres=.7):
 
     return prediction
 
-def convert_back_xcenterycenter(ph, pw, x, y, w, h):
-    x, y=float(x),float(y)
-    dw, dh = float(pw) * float(w), float(ph) * float(h)
-    xmin = round((x * pw) - (dw / 2), 6)
-    xmax = round((x * pw) + (dw / 2), 6)
-    ymin = round((y * ph) - (dh / 2), 6)
-    ymax = round((y * ph) + (dh / 2), 6)
-    return f"{xmin} {ymin} {xmax} {ymax}"
 
-def convert_xminymin_xcenterycenter(h, w, xmin, ymin, xmax, ymax):
-    # < x_center > < y_center > < width > < height > - float values relative to width and height of image, it can  be  equal from (0.0 to 1.0]
-    dw = 1. / (float(w))
-    dh = 1. / (float(h))
-    x = (xmin + xmax) / 2.0
+class det_single_img():
+    def __init__(self, configPath="cfg/vehicle.cfg", weightPath="weights/vehicle_final.weights",
+                 metaPath="cfg/vehicle.data",
+                 gpu_id=4):
 
-    y = (ymin + ymax) / 2.0
-    w = xmax - xmin
-    h = ymax - ymin
-    x = round(x * dw, 6)
-    w = round(w * dw, 6)
-    y = round(y * dh, 6)
-    h = round(h * dh, 6)
-    #     return x, y, w, h
-    return f'{x} {y} {w} {h}'
+        self.metaMain, self.netMain, self.altNames, self.uselib = None, None, None, uselib
+        # self.logger = setup_logger(log_level=logging.CRITICAL)
+        if HAS_GPU:
+            set_gpu(gpu_id)
+        if not os.path.exists(configPath):
+            raise ValueError("Invalid config path `" +
+                             os.path.abspath(configPath) + "`")
+        if not os.path.exists(weightPath):
+            raise ValueError("Invalid weight path `" +
+                             os.path.abspath(weightPath) + "`")
+        if not os.path.exists(metaPath):
+            raise ValueError("Invalid data file path `" +
+                             os.path.abspath(metaPath) + "`")
+        if self.netMain is None:
+            self.netMain = uselib.load_net_custom(configPath.encode(
+                "ascii"), weightPath.encode("ascii"), 0, 1)  # batch size = 1
+        if self.metaMain is None:
+            self.metaMain = uselib.load_meta(metaPath.encode("ascii"))
+        if self.altNames is None:
+            try:
+                with open(metaPath) as metaFH:
+                    metaContents = metaFH.read()
+                    import re
+                    match = re.search("names *= *(.*)$", metaContents,
+                                      re.IGNORECASE | re.MULTILINE)
+                    if match:
+                        result = match.group(1)
+                    else:
+                        result = None
+                    try:
+                        if os.path.exists(result):
+                            with open(result) as namesFH:
+                                namesList = namesFH.read().strip().split("\n")
+                                self.altNames = [x.strip() for x in namesList]
+                    except TypeError:
+                        pass
+            except Exception:
+                pass
+        self.size = (self.uselib.network_width(self.netMain),
+                     self.uselib.network_height(self.netMain))
+        self._seconds = 0
 
-def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.3,inter_thres=.8):
+    def darkdetect(self, image_src):
+        darknet_image = self.uselib.make_image(self.uselib.network_width(self.netMain),
+                                               self.uselib.network_height(self.netMain), 3)
+
+        try:
+            # frame_rgb = cv2.cvtColor(image_src, cv2.COLOR_BGR2RGB)
+            frame_rgb = image_src
+            frame_resized = cv2.resize(frame_rgb, self.size, interpolation=cv2.INTER_LINEAR)
+            # self.logger.info(frame_resized.shape)
+            self.uselib.copy_image_from_bytes(darknet_image, frame_resized.tobytes())
+            detections = self.uselib.detect_image(self.netMain, self.metaMain, darknet_image, thresh=0.25)
+            # return detections, cv2.cvtColor(frame_resized, cv2.COLOR_RGB2BGR)
+            return detections, frame_resized
+        except:
+            raise
+
+    def getsize(self):
+        return self.size
+
+
+thirteentimestamp = lambda: int(round(time.time() * 1e3))
+
+
+# def kill_duplicate_by_score(prediction, xou_thres=.7):
+#     from itertools import combinations
+#     def bb_intersection_over_union(boxA, boxB):
+#         boxA = (boxA[0], boxA[1], boxA[0] + boxA[2], boxA[3] + boxA[1])
+#         boxB = (boxB[0], boxB[1], boxB[0] + boxB[2], boxB[3] + boxB[1])
+#         # determine the (x, y)-coordinates of the intersection rectangle
+#         xA = max(boxA[0], boxB[0])
+#         yA = max(boxA[1], boxB[1])
+#         xB = min(boxA[2], boxB[2])
+#         yB = min(boxA[3], boxB[3])
+#         # compute the area of intersection rectangle
+#         interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+#         # compute the area of both the prediction and ground-truth
+#         # rectangles
+#         boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
+#         boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+#         # compute the intersection over union by taking the intersection
+#         # area and dividing it by the sum of prediction + ground-truth
+#         # areas - the interesection area
+#         iou = interArea / float(boxAArea + boxBArea - interArea)
+#         # return the intersection over union value
+#         return iou
+#
+#     prediction[:] = [x for x in prediction if float(x[1]) > .5]
+#
+#     boxcombins = combinations(prediction, 2)
+#     for boxcomb in boxcombins:
+#         try:
+#             xou = bb_intersection_over_union(boxcomb[0][2], boxcomb[1][2])
+#             if xou > float(xou_thres):
+#                 prediction.remove(boxcomb[1] if boxcomb[0][1] > boxcomb[1][1] else boxcomb[0])
+#         except:
+#             continue
+#
+#     return prediction
+
+def bb_intersection_over_union(boxA, boxB):
+    boxA = (boxA[0], boxA[1], boxA[0] + boxA[2], boxA[3] + boxA[1])
+    boxB = (boxB[0], boxB[1], boxB[0] + boxB[2], boxB[3] + boxB[1])
+    # determine the (x, y)-coordinates of the intersection rectangle
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+    # compute the area of intersection rectangle
+    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+    # compute the area of both the prediction and ground-truth
+    # rectangles
+    boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
+    boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the interesection area
+    iou = interArea / float(boxAArea + boxBArea - interArea)
+    # return the intersection over union value
+    return iou
+
+
+def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.25, inter_thres=.8):
     from itertools import combinations
     def bb_intersection_over_union(boxA, boxB):
         if (boxA == boxB):
@@ -609,8 +643,6 @@ def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.3,inter_thres
 
         if (AcontainsB(*boxA, *boxB) or AcontainsB(*boxB, *boxA)):
             return 1.
-
-
 
         boxA = (boxA[0], boxA[1], boxA[0] + boxA[2], boxA[3] + boxA[1])
         boxB = (boxB[0], boxB[1], boxB[0] + boxB[2], boxB[3] + boxB[1])
@@ -630,8 +662,8 @@ def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.3,inter_thres
         # areas - the interesection area
         iou = interArea / float(boxAArea + boxBArea - interArea)
         # return the intersection over union value
-        minboxArea=min(boxAArea,boxBArea)
-        if (interArea/minboxArea >inter_thres):
+        minboxArea = min(boxAArea, boxBArea)
+        if (interArea / minboxArea > inter_thres):
             return 1.
         return iou
 
@@ -647,3 +679,199 @@ def kill_duplicate_by_score(prediction, xou_thres=.7, score_thres=.3,inter_thres
             continue
 
     return prediction
+
+
+
+def convert_xminymin_xcenterycenter(h, w, xmin, ymin, xmax, ymax):
+    # < x_center > < y_center > < width > < height > - float values relative to width and height of image, it can  be  equal from (0.0 to 1.0]
+    dw = 1. / (float(w))
+    dh = 1. / (float(h))
+    x = (xmin + xmax) / 2.0
+
+    y = (ymin + ymax) / 2.0
+    w = xmax - xmin
+    h = ymax - ymin
+    x = round(x * dw, 6)
+    w = round(w * dw, 6)
+    y = round(y * dh, 6)
+    h = round(h * dh, 6)
+    #     return x, y, w, h
+    return f'{x} {y} {w} {h}'
+
+
+def convert_back_xcenterycenter(ph, pw, x, y, w, h):
+    dw, dh = pw * w, ph * h
+    xmin = (x * dw) - (dw / 2)
+    xmax = (x * dw) + (dw / 2)
+    ymin = (y * dh) - (dh / 2)
+    ymax = (y * dh) - (dh / 2)
+    return xmin, ymin, xmax, ymax
+
+
+def cvDrawBoxes_voc(detections, img):
+    for detection in detections:
+        xmin, ymin, xmax, ymax = int(round(detection[0])), \
+                                 int(round(detection[1])), \
+                                 int(round(detection[2])), \
+                                 int(round(detection[3]))
+        pt1 = (xmin, ymin)
+        pt2 = (xmax, ymax)
+        cv2.rectangle(img, pt1, pt2, (255, 0, 0), 1)
+    return img
+
+
+def convert_back_xywh(srch, srcw, deth, detw, x, y, w, h):
+    dh = float(deth) / float(srch)
+    dw = float(detw) / float(srcw)
+    xmin = round((x * dw), 6)
+    w, h = round((w * dw), 6), round((h * dw), 6)
+    xmax = round(xmin + w, 6)
+    ymin = round((y * dh), 6)
+    ymax = round(ymin + h, 6)
+    return (xmin, ymin, xmax, ymax)
+
+
+def convert_back_xyxy(srch, srcw, deth, detw, x, y, x2, y2):
+    dh = float(deth) / float(srch)
+    dw = float(detw) / float(srcw)
+    xmin = round((x * dw), 6)
+    xmax = round((x2 * dw), 6)
+    ymin = round((y * dh), 6)
+    ymax = round((y2 * dh), 6)
+    return (xmin, ymin, xmax, ymax)
+
+
+from typing import Any, Dict
+
+
+class Instances:
+    def __init__(self, **kwargs: Any):
+        self._fields: Dict[str, Any] = {}
+        for k, v in kwargs.items():
+            self.set(k, v)
+
+    def __setattr__(self, name: str, val: Any) -> None:
+        if name.startswith("_"):
+            super().__setattr__(name, val)
+        else:
+            self.set(name, val)
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "_fields" or name not in self._fields:
+            raise AttributeError("Cannot find field '{}' in the given Instances!".format(name))
+        return self._fields[name]
+
+    def set(self, name: str, value: Any) -> None:
+        """
+        Set the field named `name` to `value`.
+        The length of `value` must be the number of instances,
+        and must agree with other existing fields in this object.
+        """
+        data_len = len(value)
+        if len(self._fields):
+            assert (
+                    len(self) == data_len
+            ), "Adding a field of length {} to a Instances of length {}".format(data_len, len(self))
+        self._fields[name] = value
+
+    def has(self, name: str) -> bool:
+        """
+        Returns:
+            bool: whether the field called `name` exists.
+        """
+        return name in self._fields
+
+    def remove(self, name: str) -> None:
+        """
+        Remove the field called `name`.
+        """
+        del self._fields[name]
+
+    def get(self, name: str) -> Any:
+        """
+        Returns the field called `name`.
+        """
+        return self._fields[name]
+
+    def get_fields(self) -> Dict[str, Any]:
+        """
+        Returns:
+            dict: a dict which maps names (str) to data of the fields
+
+        Modifying the returned dict will modify this instance.
+        """
+        return self._fields
+
+    def __getitem__(self, item) -> "Instances":
+        """
+        Args:
+            item: an index-like object and will be used to index all the fields.
+
+        Returns:
+            If `item` is a string, return the data in the corresponding field.
+            Otherwise, returns an `Instances` where all fields are indexed by `item`.
+        """
+        if type(item) == int:
+            if item >= len(self) or item < -len(self):
+                raise IndexError("Instances index out of range!")
+            else:
+                item = slice(item, None, len(self))
+
+        ret = Instances()
+        for k, v in self._fields.items():
+            ret.set(k, v[item])
+        return ret
+
+    def __len__(self) -> int:
+        for v in self._fields.values():
+            return len(v)
+        raise NotImplementedError("Empty Instances does not support __len__!")
+
+    def __iter__(self):
+        raise NotImplementedError("`Instances` object is not iterable!")
+
+    def __str__(self) -> str:
+        s = self.__class__.__name__ + "("
+        s += "num_instances={}, ".format(len(self))
+        s += "fields=[{}])".format(", ".join((f"{k}: {v}" for k, v in self._fields.items())))
+        return s
+
+    __repr__ = __str__
+
+
+def if_between_twoline(lineA: Instances, lineB: Instances, centroid: Instances):
+    k1, b1 = lineA.k[0], lineA.b[0]
+    k2, b2 = lineB.k[0], lineB.b[0]
+    linay = round(float(k1 * centroid.x[0] + b1), 1)
+    linby = round(float(k2 * centroid.x[0] + b2), 1)
+    if linay == float('inf') or linby == float('inf'):
+        return float(lineA.x[0]) > centroid.x[0] > float(lineB.x[0])
+    if k1>0 and k2>0:
+        return linay > centroid.y[0] > linby #or linby < centroid.y[0] < linay
+    elif k1>0 and k2<0:
+        return linay > centroid.y[0] < linby #or linby < centroid.y[0] < linay
+    elif k1<0 and k2<0:
+        return linay < centroid.y[0] < linby #or linby < centroid.y[0] < linay
+    elif k1<0 and k2>0:
+        return linay < centroid.y[0] > linby #or linby < centroid.y[0] < linay
+
+def getSlope(x1, y1, x2, y2):
+    x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
+    try:
+        return (y2 - y1) / (x2 - x1)
+    except ZeroDivisionError:
+        return float('Inf')
+
+
+def getYInt(x1, y1, x2, y2):
+    x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
+    slope = getSlope(x1, y1, x2, y2)
+    if slope == float('inf'): return 0
+    y = -x1 * slope + y1
+    return y
+
+def unitest():
+    tdata = np.array([194, 78, 273, 122])
+    h, w = 480, 720
+    print(convert_xminymin_xcenterycenter(h, w, *tdata))
+
